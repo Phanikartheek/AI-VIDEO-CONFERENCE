@@ -1,0 +1,37 @@
+services:
+  # ─── FastAPI Backend Web Service ──────────────────────────
+  - type: web
+    name: focusmeet-backend
+    plan: free
+    env: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: focusmeet-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromStack:
+          type: redis
+          name: focusmeet-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MODERATION_ENABLED
+        value: "false" # Disabled by default on Render Free Tier to avoid Out Of Memory crashes (Whisper/Toxic-BERT consume >512MB RAM)
+      - key: CORS_ORIGINS
+        value: "*"
+
+# ─── Databases ──────────────────────────────────────────────
+databases:
+  - name: focusmeet-postgres
+    plan: free
+    databaseName: focusmeet
+    user: focusmeet
+
+# ─── Redis ──────────────────────────────────────────────────
+redis:
+  - name: focusmeet-redis
+    plan: free
+    ipAllowList: []
