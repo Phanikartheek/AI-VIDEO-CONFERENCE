@@ -1,0 +1,28 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.13.2
+pydantic==2.9.2
+pydantic-settings==2.5.2
+PyJWT==2.9.0
+python-dotenv==1.0.1
+redis==5.1.1
+livekit-api==0.7.1
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.12
+httpx==0.27.2
+
+# ─── AI Engagement & Moderation ─────────────────────────────
+# Toxicity classification (unitary/toxic-bert)
+transformers==4.44.2
+torch==2.4.1
+# Speech-to-text moderation (base model, loaded once)
+faster-whisper==1.0.3
+# Numeric helpers
+numpy==1.26.4
+scipy==1.13.1
+
+# ─── AI Meeting Summarizer (Local Ollama) ───────────────────
+httpx>=0.27.0
