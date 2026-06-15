@@ -6,8 +6,9 @@
  * fully offline, localStorage-based mock auth system so every page of the
  * app is usable without Docker / the backend running.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { authApi, type User } from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 
 const TOKEN_KEY = 'focusmeet_token';
 const USER_KEY = 'focusmeet_user';
@@ -98,11 +99,86 @@ export function useAuth() {
     setError(null);
   }, []);
 
+  // Listen to Supabase Auth state changes if Supabase is configured
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Fetch initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && session.user) {
+        const mappedUser: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          username: session.user.user_metadata?.username || session.user.user_metadata?.user_name || session.user.email?.split('@')[0] || 'User',
+          is_active: true,
+        };
+        saveAuth(session.access_token, mappedUser);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && session.user) {
+        const mappedUser: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          username: session.user.user_metadata?.username || session.user.user_metadata?.user_name || session.user.email?.split('@')[0] || 'User',
+          is_active: true,
+        };
+        saveAuth(session.access_token, mappedUser);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [saveAuth]);
+
   /* ── Register ───────────────────────────────────────────── */
   const register = useCallback(
     async (email: string, username: string, password: string) => {
       setLoading(true);
       setError(null);
+
+      if (supabase) {
+        try {
+          const { data, error: err } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                username: username,
+              },
+            },
+          });
+          if (err) throw err;
+          if (!data.session || !data.user) {
+            // Email verification might be enabled, notify user
+            setError('Registration successful! Please check your email to verify your account.');
+            setLoading(false);
+            return;
+          }
+          const mappedUser: User = {
+            id: data.user.id,
+            email: data.user.email || '',
+            username: username,
+            is_active: true,
+          };
+          saveAuth(data.session.access_token, mappedUser);
+          setLoading(false);
+          return;
+        } catch (err: any) {
+          const msg = err.message || 'Registration failed';
+          setError(msg);
+          setLoading(false);
+          throw new Error(msg);
+        }
+      }
+
       try {
         // Try real backend first
         const res = await authApi.register({ email, username, password });
@@ -153,6 +229,34 @@ export function useAuth() {
     async (email: string, password: string) => {
       setLoading(true);
       setError(null);
+
+      if (supabase) {
+        try {
+          const { data, error: err } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          if (err) throw err;
+          if (!data.session || !data.user) {
+            throw new Error('No session returned from Supabase');
+          }
+          const mappedUser: User = {
+            id: data.user.id,
+            email: data.user.email || '',
+            username: data.user.user_metadata?.username || data.user.user_metadata?.user_name || data.user.email?.split('@')[0] || 'User',
+            is_active: true,
+          };
+          saveAuth(data.session.access_token, mappedUser);
+          setLoading(false);
+          return;
+        } catch (err: any) {
+          const msg = err.message || 'Login failed';
+          setError(msg);
+          setLoading(false);
+          throw new Error(msg);
+        }
+      }
+
       try {
         // Try real backend first
         const res = await authApi.login({ email, password });
@@ -201,7 +305,10 @@ export function useAuth() {
   );
 
   /* ── Logout ─────────────────────────────────────────────── */
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setToken(null);

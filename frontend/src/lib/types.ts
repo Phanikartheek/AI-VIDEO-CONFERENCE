@@ -35,6 +35,8 @@ export interface LiveKitRoomState {
   toggleMic: () => void;
   toggleCam: () => void;
   disconnect: () => void;
+  error: string | null;
+  localVideoTrack: MediaStreamTrack | null;
 }
 
 /** Alert message for the 3D AlertPanel */

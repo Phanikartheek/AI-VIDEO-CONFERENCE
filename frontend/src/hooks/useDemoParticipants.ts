@@ -356,6 +356,8 @@ export function useDemoParticipants(localEngagementScore?: number) {
     stopLocalCamera();
   }, [stopLocalCamera]);
 
+  const localVideoTrack = localParticipant ? (localStreamRef.current?.getVideoTracks()[0] ?? null) : null;
+
   return {
     participants: state.participants,
     localParticipant,
@@ -366,5 +368,7 @@ export function useDemoParticipants(localEngagementScore?: number) {
     toggleMic,
     toggleCam,
     disconnect,
+    error: null,
+    localVideoTrack,
   };
 }

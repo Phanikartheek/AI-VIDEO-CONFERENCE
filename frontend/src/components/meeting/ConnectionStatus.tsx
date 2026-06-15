@@ -7,6 +7,7 @@ import type { ConnectionState } from '../../lib/types';
 
 interface ConnectionStatusProps {
   state: ConnectionState;
+  error?: string | null;
 }
 
 const stateConfig: Record<ConnectionState, {
@@ -50,12 +51,12 @@ const stateConfig: Record<ConnectionState, {
   },
 };
 
-export default function ConnectionStatus({ state }: ConnectionStatusProps) {
+export default function ConnectionStatus({ state, error }: ConnectionStatusProps) {
   const config = stateConfig[state];
   const { Icon } = config;
 
   return (
-    <div className="absolute top-4 right-4 z-50">
+    <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-950/70 backdrop-blur-xl border border-white/10">
         <div className="relative flex items-center justify-center">
           <div className={`w-2 h-2 rounded-full ${config.dotColor}`} />
@@ -68,6 +69,12 @@ export default function ConnectionStatus({ state }: ConnectionStatusProps) {
           {config.label}
         </span>
       </div>
+      {error && (
+        <div className="max-w-xs px-3 py-2 rounded-lg bg-red-950/80 backdrop-blur-xl border border-red-500/30 text-red-200 text-xs shadow-lg">
+          <p className="font-semibold text-red-400">Media/Connection Alert</p>
+          <p className="mt-0.5 opacity-90">{error}</p>
+        </div>
+      )}
     </div>
   );
 }

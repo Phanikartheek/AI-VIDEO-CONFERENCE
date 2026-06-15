@@ -23,6 +23,7 @@ class LiveKitService:
         participant_name: str = "",
         can_publish: bool = True,
         can_subscribe: bool = True,
+        can_publish_data: bool = True,
     ) -> str:
         """
         Generate a LiveKit access token.
@@ -34,6 +35,7 @@ class LiveKitService:
             "room": room_name,
             "canPublish": can_publish,
             "canSubscribe": can_subscribe,
+            "canPublishData": can_publish_data,
         }
 
         payload = {

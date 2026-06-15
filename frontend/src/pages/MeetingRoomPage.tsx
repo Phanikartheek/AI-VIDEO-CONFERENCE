@@ -41,6 +41,35 @@ function LoadingOverlay() {
   );
 }
 
+function LocalSelfView({ track }: { track: MediaStreamTrack | null }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (!track || !videoRef.current) return;
+    const mediaStream = new MediaStream([track]);
+    videoRef.current.srcObject = mediaStream;
+    videoRef.current.play().catch((err) => {
+      console.warn('Local self-view video playback failed:', err);
+    });
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [track]);
+
+  if (!track) return null;
+
+  return (
+    <div className="absolute bottom-24 left-4 z-40 w-48 h-36 rounded-lg overflow-hidden border border-white/10 bg-gray-950/80 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <video ref={videoRef} muted playsInline autoPlay className="w-full h-full object-cover scale-x-[-1]" />
+      <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-md text-[10px] text-white font-medium border border-white/5">
+        Self View
+      </div>
+    </div>
+  );
+}
+
 function computeCardPosition(index: number, count: number): [number, number, number] {
   if (count <= 1) return [0, 0.2, -2.8];
   const radius = count <= 3 ? 2.8 : count <= 6 ? 3.6 : count <= 10 ? 4.8 : 3.0 + count * 0.35;
@@ -185,7 +214,8 @@ export default function MeetingRoomPage({
       </Canvas>
 
       {showLoadingOverlay && <LoadingOverlay />}
-      <ConnectionStatus state={source.connectionState} />
+      <ConnectionStatus state={source.connectionState} error={source.error} />
+      <LocalSelfView track={source.localVideoTrack} />
 
       {isHost && (
         <HostSettingsPanel meetingId={meetingId} token={authToken} visible

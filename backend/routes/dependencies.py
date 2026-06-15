@@ -42,8 +42,58 @@ async def get_current_user(
             detail="Invalid token payload",
         )
 
-    user = await AuthService.get_user_by_id(db, uuid.UUID(user_id))
-    if not user or not user.is_active:
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user UUID in token",
+        )
+
+    user = await AuthService.get_user_by_id(db, user_uuid)
+    if not user:
+        # Auto-provision user from Supabase JWT claims
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing email in token payload",
+            )
+        
+        # Try to get username from Supabase user_metadata
+        user_metadata = payload.get("user_metadata", {})
+        username = user_metadata.get("username") or user_metadata.get("user_name") or email.split("@")[0]
+        
+        # Check if email or username is already taken to prevent database conflicts
+        from sqlalchemy import select
+        stmt = select(User).where((User.email == email) | (User.username == username))
+        existing_res = await db.execute(stmt)
+        existing_user = existing_res.scalar_one_or_none()
+        
+        if existing_user:
+            if existing_user.email == email:
+                # Same email but different ID (e.g. old local mock db record).
+                # Update the ID to match Supabase UUID.
+                existing_user.id = user_uuid
+                user = existing_user
+                await db.commit()
+            else:
+                # Username conflict only; append random string suffix
+                username = f"{username}_{uuid.uuid4().hex[:4]}"
+        
+        if not user:
+            user = User(
+                id=user_uuid,
+                email=email,
+                username=username,
+                hashed_password="supabase-authenticated",
+                is_active=True
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
