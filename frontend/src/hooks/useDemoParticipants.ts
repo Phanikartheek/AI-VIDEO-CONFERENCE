@@ -148,7 +148,7 @@ interface DemoState {
   isCamEnabled: boolean;
 }
 
-export function useDemoParticipants() {
+export function useDemoParticipants(localEngagementScore?: number) {
   const [state, setState] = useState<DemoState>({
     participants: [],
     connectionState: 'disconnected',
@@ -157,8 +157,82 @@ export function useDemoParticipants() {
     isCamEnabled: true,
   });
 
+  const [localParticipant, setLocalParticipant] = useState<RoomParticipant | null>(null);
+
   const texturesRef = useRef<Map<string, { texture: THREE.CanvasTexture; cleanup: () => void }>>(new Map());
   const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Webcam refs
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const localRafRef = useRef<number>(0);
+
+  const stopLocalCamera = useCallback(() => {
+    if (localRafRef.current) cancelAnimationFrame(localRafRef.current);
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    localTextureRef.current?.dispose();
+    localTextureRef.current = null;
+    localVideoRef.current = null;
+    setLocalParticipant(null);
+  }, []);
+
+  const startLocalCamera = useCallback(async () => {
+    stopLocalCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, frameRate: 24 },
+        audio: false,
+      });
+      localStreamRef.current = stream;
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      video.autoplay = true;
+      await video.play().catch(() => {});
+      localVideoRef.current = video;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, 640, 480);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      localTextureRef.current = texture;
+
+      const drawLocal = () => {
+        if (video.readyState >= video.HAVE_CURRENT_DATA) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          texture.needsUpdate = true;
+        }
+        localRafRef.current = requestAnimationFrame(drawLocal);
+      };
+      localRafRef.current = requestAnimationFrame(drawLocal);
+
+      setLocalParticipant({
+        id: 'local-user',
+        name: 'You (Host)',
+        role: 'host',
+        engagementScore: localEngagementScore !== undefined ? localEngagementScore : 100,
+        isSpeaking: false,
+        videoTexture: texture,
+        audioTrack: null,
+        hasVideo: true,
+        hasAudio: false,
+        joinedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to access local webcam for demo:', err);
+    }
+  }, [localEngagementScore, stopLocalCamera]);
 
   const addAlert = useCallback((text: string, type: AlertMessage['type'] = 'info') => {
     const alert: AlertMessage = { id: `alert-${Date.now()}-${Math.random().toString(36).slice(2)}`, text, type, timestamp: Date.now() };
@@ -168,6 +242,16 @@ export function useDemoParticipants() {
       setState((s) => ({ ...s, alerts: [] }));
     }, 4000);
   }, []);
+
+  // Sync local score
+  useEffect(() => {
+    setLocalParticipant((prev) => {
+      if (!prev) return null;
+      const targetScore = localEngagementScore !== undefined ? localEngagementScore : 100;
+      if (prev.engagementScore === targetScore) return prev;
+      return { ...prev, engagementScore: targetScore };
+    });
+  }, [localEngagementScore]);
 
   // Simulate connection sequence
   useEffect(() => {
@@ -236,8 +320,20 @@ export function useDemoParticipants() {
       if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
       texturesRef.current.forEach((entry) => entry.cleanup());
       texturesRef.current.clear();
+      stopLocalCamera();
     };
-  }, [addAlert]);
+  }, [addAlert, stopLocalCamera]);
+
+  // Start webcam when connected and enabled
+  useEffect(() => {
+    if (state.connectionState === 'connected') {
+      if (state.isCamEnabled) {
+        startLocalCamera();
+      } else {
+        stopLocalCamera();
+      }
+    }
+  }, [state.connectionState, state.isCamEnabled, startLocalCamera, stopLocalCamera]);
 
   const toggleMic = useCallback(() => {
     setState((s) => {
@@ -257,11 +353,12 @@ export function useDemoParticipants() {
     setState((s) => ({ ...s, connectionState: 'disconnected', participants: [] }));
     texturesRef.current.forEach((entry) => entry.cleanup());
     texturesRef.current.clear();
-  }, []);
+    stopLocalCamera();
+  }, [stopLocalCamera]);
 
   return {
     participants: state.participants,
-    localParticipant: null as RoomParticipant | null,
+    localParticipant,
     connectionState: state.connectionState,
     alerts: state.alerts,
     isMicEnabled: state.isMicEnabled,

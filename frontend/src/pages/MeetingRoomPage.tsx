@@ -63,7 +63,7 @@ export default function MeetingRoomPage({
   const liveAlertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const liveKit = useLiveKitRoom(livekitToken, localEngagementScore);
-  const demo = useDemoParticipants();
+  const demo = useDemoParticipants(localEngagementScore);
   const isLive = livekitToken !== null && livekitToken !== '';
   const source = isLive ? liveKit : demo;
 
